@@ -1,19 +1,67 @@
+import emailjs from "@emailjs/browser"
 import { useState, type FormEvent } from "react"
 import { SectionHeading } from "../components/SectionHeading"
+import { emailJsConfig } from "../data/emailjs"
+
+type FormStatus = "idle" | "sending" | "success" | "error"
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function Contact() {
-  const [submitted, setSubmitted] = useState(false)
+  const [status, setStatus] = useState<FormStatus>("idle")
+  const [feedback, setFeedback] = useState("")
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    /**
-     * Integration point:
-     * Connect this form to an email service such as Formspree, Netlify Forms,
-     * or a custom backend endpoint. Until then, the UI stays in place without
-     * sending a message.
-     */
-    setSubmitted(true)
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const name = String(formData.get("name") ?? "").trim()
+    const email = String(formData.get("email") ?? "").trim()
+    const message = String(formData.get("message") ?? "").trim()
+
+    if (!name || !email || !message) {
+      setStatus("error")
+      setFeedback("Please fill in your name, email, and message.")
+      return
+    }
+
+    if (!emailPattern.test(email)) {
+      setStatus("error")
+      setFeedback("Please enter a valid email address.")
+      return
+    }
+
+    if (!emailJsConfig.publicKey) {
+      setStatus("error")
+      setFeedback(
+        "The contact form is not fully configured yet. Please try again later.",
+      )
+      return
+    }
+
+    setStatus("sending")
+    setFeedback("")
+
+    try {
+      await emailjs.send(
+        emailJsConfig.serviceId,
+        emailJsConfig.templateId,
+        { name, email, message },
+        { publicKey: emailJsConfig.publicKey },
+      )
+      form.reset()
+      setStatus("success")
+      setFeedback("Thank you. Your message was sent successfully.")
+    } catch {
+      setStatus("error")
+      setFeedback(
+        "Sorry, the message could not be sent. Please try again in a moment.",
+      )
+    }
   }
+
+  const sending = status === "sending"
 
   return (
     <section id="contact" className="px-5 py-20">
@@ -26,7 +74,6 @@ export function Contact() {
         <form
           onSubmit={handleSubmit}
           className="mx-auto max-w-2xl rounded-3xl border border-sand/80 bg-card p-8"
-          noValidate
         >
           <label className="block text-sm text-ink" htmlFor="name">
             Name
@@ -34,7 +81,8 @@ export function Contact() {
               id="name"
               name="name"
               required
-              className="mt-2 w-full rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold"
+              disabled={sending}
+              className="mt-2 w-full rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold disabled:opacity-60"
               autoComplete="name"
             />
           </label>
@@ -45,7 +93,8 @@ export function Contact() {
               name="email"
               type="email"
               required
-              className="mt-2 w-full rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold"
+              disabled={sending}
+              className="mt-2 w-full rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold disabled:opacity-60"
               autoComplete="email"
             />
           </label>
@@ -56,18 +105,23 @@ export function Contact() {
               name="message"
               required
               rows={5}
-              className="mt-2 w-full resize-y rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold"
+              disabled={sending}
+              className="mt-2 w-full resize-y rounded-2xl border border-sand bg-ivory px-4 py-3 text-sm outline-none focus:border-gold disabled:opacity-60"
             />
           </label>
           <button
             type="submit"
-            className="mt-6 rounded-full bg-gold px-6 py-2.5 text-sm font-medium text-ivory transition hover:bg-gold-deep"
+            disabled={sending}
+            className="mt-6 rounded-full bg-gold px-6 py-2.5 text-sm font-medium text-ivory transition hover:bg-gold-deep disabled:pointer-events-none disabled:opacity-60"
           >
-            Send
+            {sending ? "Sending…" : "Send"}
           </button>
-          {submitted ? (
-            <p className="mt-4 text-sm text-sage" role="status">
-              Form is ready, but no email service is connected yet.
+          {feedback ? (
+            <p
+              className={`mt-4 text-sm ${status === "success" ? "text-sage" : "text-ink"}`}
+              role={status === "error" ? "alert" : "status"}
+            >
+              {feedback}
             </p>
           ) : null}
         </form>
